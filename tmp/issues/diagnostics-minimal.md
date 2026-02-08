@@ -1,8 +1,8 @@
-# Issue 03: Diagnostics 最小実装
+# Issue: Diagnostics 最小実装
 
 - status: open
 - estimate: 60m
-- depends_on: 02
+- depends_on: types-res.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#テスト戦略`
 

@@ -1,8 +1,8 @@
-# Issue 05: ConfluenceInputXml 正規化
+# Issue: ConfluenceInputXml 正規化
 
 - status: open
 - estimate: 90m
-- depends_on: 04
+- depends_on: htmlparser2-ffi.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#ffi境界の型ルール固定`
 

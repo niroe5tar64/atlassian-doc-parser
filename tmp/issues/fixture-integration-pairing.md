@@ -1,8 +1,8 @@
-# Issue 14: fixture 統合テスト（自動ペアリング）
+# Issue: fixture 統合テスト（自動ペアリング）
 
 - status: open
 - estimate: 75m
-- depends_on: 13
+- depends_on: atlassian-parser-integration.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#テスト契約固定`
 

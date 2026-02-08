@@ -1,8 +1,8 @@
-# Issue 07: IrBuilder（装飾系: strong/em/code/del）
+# Issue: IrBuilder（装飾系: strong/em/code/del）
 
 - status: open
 - estimate: 75m
-- depends_on: 06
+- depends_on: irbuilder-basic.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#主要ノード一覧`
 

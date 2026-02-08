@@ -1,8 +1,8 @@
-# Issue 11: MarkdownRenderer（text escape）
+# Issue: MarkdownRenderer（text escape）
 
 - status: open
 - estimate: 75m
-- depends_on: 02
+- depends_on: types-res.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#markdownrendererのエスケープ境界`
 

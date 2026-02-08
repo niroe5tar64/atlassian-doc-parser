@@ -1,8 +1,8 @@
-# Issue 09: IrBuilder（list）
+# Issue: IrBuilder（list）
 
 - status: open
 - estimate: 90m
-- depends_on: 06
+- depends_on: irbuilder-basic.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#markdown出力規約固定`
 

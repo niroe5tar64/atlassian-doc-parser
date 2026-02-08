@@ -1,8 +1,8 @@
-# Issue 13: AtlassianDocParser 統合 + Error boundary
+# Issue: AtlassianDocParser 統合 + Error boundary
 
 - status: open
 - estimate: 90m
-- depends_on: 03,10,12
+- depends_on: diagnostics-minimal.md, irbuilder-table.md, markdownrenderer-structures.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#公開api`
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#converterror`

@@ -1,8 +1,8 @@
-# Issue 15: strict モード総点検
+# Issue: strict モード総点検
 
 - status: open
 - estimate: 60m
-- depends_on: 13,14
+- depends_on: atlassian-parser-integration.md, fixture-integration-pairing.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#変換マトリクス固定`
 

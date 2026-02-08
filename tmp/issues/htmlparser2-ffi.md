@@ -1,8 +1,8 @@
-# Issue 04: htmlparser2 FFI 追加
+# Issue: htmlparser2 FFI 追加
 
 - status: open
 - estimate: 75m
-- depends_on: 01
+- depends_on: scaffold.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#xmlパース戦略`
 

@@ -1,8 +1,8 @@
-# Issue 06: IrBuilder（heading/paragraph/text）
+# Issue: IrBuilder（heading/paragraph/text）
 
 - status: open
 - estimate: 90m
-- depends_on: 02,03,05
+- depends_on: types-res.md, diagnostics-minimal.md, confluence-input-xml-normalize.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#変換マトリクス固定`
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#irbuilderの空白正規化ルール`

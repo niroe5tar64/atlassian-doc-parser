@@ -1,4 +1,4 @@
-# Issue 01: scaffold 作成
+# Issue: scaffold 作成
 
 - status: open
 - estimate: 45m

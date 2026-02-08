@@ -1,8 +1,8 @@
-# Issue 02: Types.res 実装
+# Issue: Types.res 実装
 
 - status: open
 - estimate: 60m
-- depends_on: 01
+- depends_on: scaffold.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#ir中間表現`
 

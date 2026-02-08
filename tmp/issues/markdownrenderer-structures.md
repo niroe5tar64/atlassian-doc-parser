@@ -1,8 +1,8 @@
-# Issue 12: MarkdownRenderer（list/table/code fence）
+# Issue: MarkdownRenderer（list/table/code fence）
 
 - status: open
 - estimate: 90m
-- depends_on: 11
+- depends_on: markdownrenderer-escape.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#markdown出力規約固定`
 

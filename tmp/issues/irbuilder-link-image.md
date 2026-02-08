@@ -1,8 +1,8 @@
-# Issue 08: IrBuilder（link/image）
+# Issue: IrBuilder（link/image）
 
 - status: open
 - estimate: 90m
-- depends_on: 06
+- depends_on: irbuilder-basic.md
 - references:
   - `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx#変換マトリクス固定`
 
