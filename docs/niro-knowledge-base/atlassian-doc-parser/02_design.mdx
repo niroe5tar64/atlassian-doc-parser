@@ -1,0 +1,276 @@
+---
+title: "02. 設計"
+description: "atlassian-doc-parser のアーキテクチャと主要な設計判断"
+---
+
+## アーキテクチャ: XML → IR → Markdown
+
+本ライブラリは 2 段階変換アーキテクチャを採用しています。XML パース結果を直接 Markdown に変換するのではなく、中間表現（IR）を経由します。
+
+```mermaid
+graph LR
+    XML["XML 文字列"] --> DOM["DOM ツリー<br/>(htmlparser2)"]
+    DOM --> IR["IR<br/>中間表現"]
+    IR --> MD["Markdown<br/>文字列"]
+
+    style DOM fill:#f9f,stroke:#333
+    style IR fill:#ff9,stroke:#333
+```
+
+IR を挟む理由は以下の通りです。
+
+- **テスタビリティ**: XML → IR と IR → Markdown を独立してテストできる
+- **関心分離**: IrBuilder は「何を変換するか」、MarkdownRenderer は「どう出力するか」に集中できる
+- **拡張性**: 出力形式を変更する場合（例: 別の Markdown 方言）、MarkdownRenderer のみ差し替えれば対応可能
+
+## 公開 API
+
+単一の変換関数を公開します。
+
+```rescript
+// エントリポイント
+let convertConfluenceStorageToMarkdown: (
+  string,
+  ~options: convertOptions=?,
+) => convertResult
+```
+
+### 型定義
+
+```rescript
+type convertStats = {
+  unsupportedNodeCount: int,
+  macroCount: int,
+}
+
+type convertOptions = {
+  strict?: bool, // default: false
+}
+
+type convertResult = {
+  markdown: string,
+  warnings: array<string>,
+  stats?: convertStats,
+}
+```
+
+### ConvertError
+
+ReScript 内部では `exception` として定義し、公開 API のエントリポイント（boundary）で JS の `Error` オブジェクトに変換して re-throw します。
+
+```rescript
+// ReScript 内部定義
+type convertErrorCode =
+  | InvalidXml
+  | StrictModeViolation
+  | InternalError
+
+exception ConvertError({code: convertErrorCode, message: string})
+```
+
+JS 消費者は `e.name === 'ConvertError'` と `e.code` で判別します。
+
+```typescript
+// JS 消費者での使用例
+try {
+  const result = convertConfluenceStorageToMarkdown(xml);
+} catch (e) {
+  if (e instanceof Error && e.name === 'ConvertError') {
+    const code = (e as { code: string }).code;
+    // 'InvalidXml' | 'StrictModeViolation' | 'InternalError'
+  }
+}
+```
+
+## IR（中間表現）
+
+### blockNode / inlineNode の分離構造
+
+IR はブロックレベルとインラインレベルを型で分離し、ReScript の variant type で表現します。パターンマッチにより変換ルールの網羅性がコンパイル時に検証されます。
+
+```rescript
+// インラインノード
+type rec inlineNode =
+  | Text(string)
+  | Strong(array<inlineNode>)
+  | Emphasis(array<inlineNode>)
+  | Strikethrough(array<inlineNode>)
+  | InlineCode(string)
+  | Link({href: string, children: array<inlineNode>})
+  | Image({src: string, alt: option<string>})
+  | LineBreak
+  | UnsupportedInline(string)
+
+// ブロックレベルノード
+type rec listItem = {children: array<blockNode>}
+and tableCell = {children: array<inlineNode>}
+and blockNode =
+  | Heading({level: int, children: array<inlineNode>})
+  | Paragraph(array<inlineNode>)
+  | BulletList(array<listItem>)
+  | OrderedList(array<listItem>)
+  | Table({headers: option<array<tableCell>>, rows: array<array<tableCell>>})
+  | CodeBlock({language: option<string>, content: string})
+  | HorizontalRule
+  | Unsupported(string)
+
+// ドキュメント（トップレベル）
+type document = {children: array<blockNode>}
+```
+
+### 主要ノード一覧
+
+| IR ノード | Confluence 要素 | Markdown 出力 |
+|-----------|----------------|---------------|
+| `Heading` | `<h1>` 〜 `<h6>` | `#` 〜 `######` |
+| `Paragraph` | `<p>` | テキスト + 空行 |
+| `BulletList` | `<ul><li>` | `- item` |
+| `OrderedList` | `<ol><li>` | `1. item` |
+| `Table` | `<table><tr><th>/<td>` | GFM テーブル |
+| `CodeBlock` | `ac:structured-macro[name="code"]` | ` ```lang ` |
+| `HorizontalRule` | `<hr />` | `---` |
+| `Text` | テキストノード | そのまま |
+| `Strong` | `<strong>` / `<b>` | `**text**` |
+| `Emphasis` | `<em>` / `<i>` | `*text*` |
+| `Strikethrough` | `<del>` / `<s>` | `~~text~~` |
+| `InlineCode` | `<code>` | `` `text` `` |
+| `Link` | `<a href>` / `ac:link` | `[text](href)` |
+| `Image` | `ac:image` | `![alt](src)` |
+| `LineBreak` | `<br />` | 末尾 2 スペース + 改行 |
+| `Unsupported` | 未対応ブロック要素 | `<!-- unsupported: ... -->` |
+| `UnsupportedInline` | 未対応インライン要素 | `<!-- unsupported inline: ... -->` |
+
+### 構造上の特記事項
+
+- **listItem** は `array<blockNode>` を持つ（ネストリスト対応）
+- **tableCell** は `array<inlineNode>` のみ持つ（GFM テーブルの制約）
+- **Image** は inlineNode に分類し、ブロック位置では Paragraph でラップ（出力に差なし）
+
+## XML パース戦略
+
+### htmlparser2 の選定理由
+
+| 評価軸 | htmlparser2 | @xmldom/xmldom | fast-xml-parser |
+|--------|-------------|----------------|-----------------|
+| バンドルサイズ | ~30KB | ~160KB | ~100KB |
+| フラグメント対応 | ネイティブ | ラッパー必要 | ラッパー必要 |
+| エラー耐性 | 高（寛容パーサー） | 中（XML 準拠） | 中 |
+
+htmlparser2 を選定した主な理由は以下の 3 点です。
+
+1. **バンドルサイズ最小**: GAS デプロイサイズ制約への影響を最小化
+2. **フラグメント対応**: Confluence Storage Format はルート要素を持たないため、ラッパー不要で解析可能
+3. **エラー耐性**: 不正な構造を含む場合でも部分的に解析を継続できる
+
+domutils（htmlparser2 の DOM 探索ユーティリティ）は不使用とします。本パーサーの目的は DOM の「探索・分析」ではなく、パース結果を入力順に処理して Markdown に「変換」することです。ノードの `.type` / `.name` / `.attribs` / `.children` / `.data` プロパティへの直接アクセスで十分対応できます。
+
+### 基本アプローチ
+
+```
+入力 (string)
+  │
+  ▼
+htmlparser2.parseDocument(input, { xmlMode: true })
+  │
+  ▼
+DOM ツリー（ノードプロパティに直接アクセス）
+  │
+  ▼
+IrBuilder が再帰的に走査して IR を構築
+```
+
+`xmlMode: true` により `ac:link`, `ri:page` 等のプレフィックス付きタグ名・属性名がそのまま保持されます。ストリーミング方式は不採用です。Confluence Storage Format は「子要素を見ないと変換方針が確定しない構造」（`ac:link`, `ac:structured-macro`, `table` など）が多く、ストリーミングでは状態機械 + 部分バッファが必要になり、実質的に DOM を自前で再構築することになるためです。
+
+## 主要な設計判断
+
+| 判断 | 採用方式 | 理由 | 代替案 |
+|------|----------|------|--------|
+| ConvertError の ReScript 表現 | exception + JS boundary wrapper | 再帰的木走査での早期脱出に exception が最適。boundary は公開 API 1 箇所で JS Error に変換 | Result 型（再帰全階層でエラー伝播が必要になり煩雑）、JS Error を直接 throw（ReScript 側でパターンマッチ不可） |
+| 内部リンクの出力 | `confluence-internal://` スキーム | パーサーはデータを完全に抽出し、URL 解決は消費者の責務。warning なし | プレースホルダー出力（データが失われる）、URL 解決をパーサーに含める（責務の肥大化） |
+| 添付画像の出力 | `confluence-attachment://` スキーム | 内部リンクと同パターン。warning なし | 同上 |
+| テーブルセル内ブロック要素 | IrBuilder でインライン化 + `<br>` 結合 | GFM テーブルはブロック要素非対応。`<br>` HTML タグは主要レンダラーで改行として描画される | HTML テーブルで出力（Markdown としての可読性が低下） |
+| ネストリストインデント | マーカー幅ベース（`- ` → 2、`N. ` → digits(N)+2） | CommonMark/GFM 準拠。2 スペース固定では ordered list のネストが GitHub で正しく表示されない | 固定幅（2 or 4 スペース） |
+| `<del>` / `<s>` | GFM `~~text~~` | 意味論的マークアップ（「この部分は無効」）であり、純粋な見た目装飾とは質が異なる | テキストのみ出力（意味が失われる） |
+| `<u>` / `<sub>` / `<sup>` | テキストのみ出力（transparent、warning なし） | 標準 Markdown で表現不可。装飾は失われるが文意は保持される | `UnsupportedInline` 出力（読者へのノイズ） |
+
+## モジュール構成
+
+### ディレクトリ構造
+
+```
+atlassian-doc-parser/
+├── src/
+│   ├── AtlassianDocParser.res     # 公開 API（エントリポイント）
+│   ├── Types.res                   # 公開型 + IR 型定義
+│   ├── XmlParser.res               # XML 文字列 → DOM ツリー
+│   ├── IrBuilder.res               # DOM ツリー → IR 変換
+│   ├── MarkdownRenderer.res        # IR → Markdown 文字列
+│   ├── Diagnostics.res             # warning 収集・stats 計算
+│   └── Bindings/
+│       └── Htmlparser2.res         # htmlparser2 FFI バインディング
+├── test/
+│   ├── fixtures/                   # Golden Test 用 fixture
+│   ├── AtlassianDocParser_test.res # E2E テスト（fixture ベース）
+│   ├── IrBuilder_test.res          # IrBuilder Unit テスト
+│   └── MarkdownRenderer_test.res   # MarkdownRenderer Unit テスト
+├── rescript.json
+├── package.json
+└── biome.json
+```
+
+### モジュール責務
+
+| モジュール | 責務 |
+|-----------|------|
+| **AtlassianDocParser** | パイプラインのオーケストレーション。XmlParser → IrBuilder → MarkdownRenderer → Diagnostics 集約。ConvertError の boundary（exception → JS Error 変換） |
+| **Types** | 全モジュールで共有する型の定義（ConvertOptions, ConvertResult, IR 型） |
+| **XmlParser** | XML 文字列を htmlparser2 の DOM ツリーに変換。パース不能時は例外 |
+| **IrBuilder** | DOM ツリーを再帰的に走査し IR を構築。未対応要素は Unsupported ノード生成 + Diagnostics 記録。strict モードでは ConvertError を raise |
+| **MarkdownRenderer** | IR を Markdown 文字列に変換する純粋関数。副作用なし |
+| **Diagnostics** | warning メッセージの収集と stats 計算。Ref ベースの可変コンテナ（変換パイプライン内で 1 インスタンスを共有） |
+
+### 依存方向
+
+```
+AtlassianDocParser
+  ├── Types
+  ├── XmlParser
+  │     └── Bindings/Htmlparser2
+  ├── IrBuilder
+  │     ├── Types
+  │     └── Diagnostics
+  ├── MarkdownRenderer
+  │     └── Types
+  └── Diagnostics
+        └── Types
+```
+
+依存は一方向で循環はありません。全モジュールが Types に依存し、Diagnostics は IrBuilder と AtlassianDocParser から参照されます。
+
+## テスト戦略
+
+### 3 層テスト構成
+
+| テスト種別 | 対象 | テスト方針 |
+|-----------|------|-----------|
+| Golden Test | AtlassianDocParser（E2E） | fixture の `input.xml` → `expected.md` の一致検証 |
+| Unit Test | IrBuilder | 要素別に XML フラグメント → IR ノードを検証 |
+| Unit Test | MarkdownRenderer | IR ノード → Markdown 文字列を検証 |
+| Unit Test | Diagnostics | warning / stats の収集を検証 |
+
+### テストケース数
+
+| 対象 | ケース数 | 内容 |
+|------|---------|------|
+| Golden Test（fixture） | 3 件 | basic / complex_table_code / mixed_unsupported |
+| IrBuilder | 30 件（B01〜B30） | 各要素の正常変換 + エッジケース + strict モード |
+| MarkdownRenderer | 17 件（C01〜C17） | 各 IR ノードの出力検証 + エッジケース |
+| Diagnostics | 4 件（D01〜D04） | warning / stats の収集・集計 |
+
+### 初期 fixture の概要
+
+| fixture | 含む要素 | 検証観点 |
+|---------|---------|---------|
+| 01: basic | h1, h2, p, strong, em, a（外部）, code（inline）, br, ul | 基本要素の正常変換 |
+| 02: complex_table_code | table（th/td）, code block（言語付/なし）, inline code | 複合要素の変換 |
+| 03: mixed_unsupported | ネストリスト, ac:image（外部/添付）, ac:link, del, sup, hr, 未対応マクロ | 混合コンテンツ + unsupported + warnings |

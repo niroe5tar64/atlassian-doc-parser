@@ -1,0 +1,122 @@
+---
+title: "01. 背景と方針"
+description: "なぜ Confluence 専用パーサーを自作するのか、その変換方針"
+---
+
+## Confluence Storage Format とは
+
+Confluence はページの本文を **Storage Format** と呼ばれる XML ベースの独自形式で保存しています。標準的な XHTML タグ（`<p>`, `<h1>`, `<table>` など）に加え、Confluence 固有の名前空間を持つカスタム要素が混在します。
+
+```xml
+<!-- 実際の Storage Format の例 -->
+<h1>Getting Started</h1>
+<p>Text with <strong>bold</strong></p>
+<ac:structured-macro ac:name="code" ac:schema-version="1">
+  <ac:parameter ac:name="language">javascript</ac:parameter>
+  <ac:plain-text-body><![CDATA[console.log("hello");]]></ac:plain-text-body>
+</ac:structured-macro>
+<ac:link>
+  <ri:page ri:content-title="Target Page" ri:space-key="PROJ" />
+  <ac:plain-text-link-body><![CDATA[Link Text]]></ac:plain-text-link-body>
+</ac:link>
+```
+
+主な特徴は以下の通りです。
+
+- **XML フラグメント**: ルート要素を持たない（複数のトップレベル要素が並ぶ）
+- **カスタム名前空間**: `ac:`（Atlassian Confluence）と `ri:`（Resource Identifier）プレフィックスのカスタム要素
+- **マクロ構造**: `ac:structured-macro` 配下にパラメータやリッチテキストボディを持つ複合構造
+- **CDATA セクション**: コードブロックやリンクテキストに `<![CDATA[...]]>` を使用
+
+通常の HTML パーサーでは名前空間付きタグの保持やルートなしフラグメントの処理に対応できず、汎用 Markdown 変換ライブラリでは `ac:link` や `ac:structured-macro` といった Confluence 固有の構造を正しく変換できません。
+
+## なぜ自作するか
+
+### GAS バンドルサイズ制約
+
+GAS（Google Apps Script）にはデプロイサイズの上限があります。汎用の Markdown 変換ライブラリは多機能であるぶんサイズが大きく、GAS の制約に収まりにくいため、必要最小限の変換機能を持つ軽量ライブラリが求められます。
+
+### ReScript の採用
+
+ReScript の variant type とパターンマッチは、XML 要素の種類に応じたディスパッチや中間表現（IR）の変換処理に適しています。型システムにより変換ルールの網羅性をコンパイル時に検証でき、要素の追加漏れを防止できます。
+
+### 変換精度のコントロール
+
+Confluence Storage Format には内部リンク（`ac:link` + `ri:page`）や添付画像（`ac:image` + `ri:attachment`）など、変換時に特別な扱いが必要な構造があります。これらを独自スキーム（`confluence-internal://`, `confluence-attachment://`）で出力し、消費者側（GAS Backend）で解決する設計は、汎用ライブラリでは実現できません。
+
+## 変換スコープ（MVP）
+
+### 対応する要素
+
+| カテゴリ | 要素 | 変換先 |
+|----------|------|--------|
+| 見出し | `<h1>` 〜 `<h6>` | `#` 〜 `######` |
+| 段落 | `<p>` | テキスト + 空行 |
+| リスト | `<ul>`, `<ol>`, `<li>` | `- item`, `1. item` |
+| テーブル | `<table>`, `<tr>`, `<th>`, `<td>` | GFM テーブル |
+| コードブロック | `ac:structured-macro[name="code"]` | ` ```lang ` |
+| 外部リンク | `<a href>` | `[text](url)` |
+| 内部リンク | `ac:link` + `ri:page` | `[text](confluence-internal://...)` |
+| 外部画像 | `ac:image` + `ri:url` | `![alt](url)` |
+| 添付画像 | `ac:image` + `ri:attachment` | `![alt](confluence-attachment://...)` |
+| テキスト装飾 | `<strong>`, `<em>`, `<code>`, `<del>` | `**`, `*`, `` ` ``, `~~` |
+| 改行・区切り | `<br />`, `<hr />` | 末尾 2 スペース, `---` |
+
+### 対応しない要素（MVP 後に検討）
+
+未対応の要素はプレースホルダー（`<!-- unsupported: ... -->`）として出力し、`warnings` に記録します。
+
+| 要素 | 判断基準 |
+|------|----------|
+| `ac:structured-macro`（code 以外） | マクロは種類が多く、MVP では code のみに限定 |
+| `ac:task-list` | チェックリスト構造の変換が複雑 |
+| `ac:emoticon` | 絵文字マッピングが必要 |
+| `<u>`, `<sub>`, `<sup>` | 標準 Markdown で表現不可。テキスト内容のみ出力（プレースホルダーではなく transparent 扱い） |
+
+> `<u>`, `<sub>`, `<sup>` はプレースホルダーではなくテキスト内容をそのまま出力します。装飾は失われますが文意は保持されるため、warning も出しません。一方 `<del>` / `<s>` は GFM `~~text~~` で出力します。取り消し線は「この部分は無効」という意味論的マークアップであり、純粋な見た目装飾とは質が異なるため MVP スコープに含めます。
+
+## エラーハンドリング方針
+
+### Best Effort モード（デフォルト）
+
+未対応要素に遭遇した場合、変換を中断せずプレースホルダーを出力して処理を継続します。GAS Backend はこのモードで呼び出し、変換が部分的に失敗しても同期を継続します。
+
+### Strict モード
+
+未対応要素に遭遇した時点で `ConvertError`（`StrictModeViolation`）を throw して即座に中断します。変換結果の完全性を保証したい場合に使用します。
+
+### Warning 体系
+
+変換中に発生した事象を 5 つのカテゴリで分類し、`warnings: array<string>` として返します。
+
+| カテゴリ | 説明 | 例 |
+|----------|------|-----|
+| `UNSUPPORTED_ELEMENT` | MVP 対象外のブロック要素 | `[UNSUPPORTED_ELEMENT] ac:task-list` |
+| `UNSUPPORTED_MACRO` | MVP 対象外のマクロ | `[UNSUPPORTED_MACRO] toc` |
+| `UNSUPPORTED_INLINE` | MVP 対象外のインライン要素 | `[UNSUPPORTED_INLINE] ac:emoticon` |
+| `CONVERSION_ERROR` | 既知要素の変換失敗 | `[CONVERSION_ERROR] table: inconsistent column count` |
+| `INVALID_STRUCTURE` | 要素の構造が想定外 | `[INVALID_STRUCTURE] li without parent ul/ol` |
+
+統計情報（`stats`）も返却し、`unsupportedNodeCount` と `macroCount` で変換品質の概要を把握できます。
+
+## 設計の前提となった判断
+
+以下は設計検討の過程で確定した方針です。
+
+| 項目 | 決定内容 |
+|------|----------|
+| 公開 API | `ConvertResult`（`markdown` + `warnings` + `stats`）を返す単一関数 |
+| アーキテクチャ | XML → IR → Markdown の 2 段階変換 |
+| 未対応要素 | プレースホルダー（Markdown コメント）+ warnings |
+| エラーハンドリング | Best Effort（デフォルト）/ Strict モード |
+| テスト戦略 | fixture ベース Unit テスト、初期 3 件 |
+| パッケージ運用 | `0.x` 系、初期は `file:` ローカル参照 |
+| XML パースライブラリ | htmlparser2 のみ（domutils 不使用） |
+| ConvertError の表現 | ReScript exception + JS boundary wrapper |
+| 内部リンク | `confluence-internal://` スキームで出力（warning なし） |
+| 添付画像 | `confluence-attachment://` スキームで出力（warning なし） |
+| IR 構造 | blockNode / inlineNode を型レベルで分離 |
+| テーブルセル内ブロック要素 | IrBuilder でインライン化し `<br>` で結合 |
+| ネストリストインデント | マーカー幅ベース（CommonMark 準拠） |
+| `<del>` / `<s>` | GFM `~~text~~` で出力（意味論的マークアップ） |
+| `<u>` / `<sub>` / `<sup>` | テキストのみ出力（warning なし） |
