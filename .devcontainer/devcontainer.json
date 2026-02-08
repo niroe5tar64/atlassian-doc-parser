@@ -32,7 +32,8 @@
         "wayou.vscode-todo-highlight",
         "biomejs.biome",
         "oven.bun-vscode",
-        "bierner.markdown-mermaid"
+        "bierner.markdown-mermaid",
+        "chenglou92.rescript-vscode"
       ],
       "settings": {
         "editor.formatOnSave": true,

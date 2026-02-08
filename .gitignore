@@ -25,6 +25,13 @@ Thumbs.db
 *.swo
 *~
 
+# ReScript
+*.res.mjs
+*.res.cjs
+*.res.js
+lib/
+.bsb.lock
+
 # Bun
 .bun/
 bun.lockb

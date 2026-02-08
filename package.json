@@ -1,0 +1,28 @@
+{
+  "name": "atlassian-doc-parser",
+  "version": "0.1.0",
+  "description": "Confluence Storage Format (XML) to Markdown converter",
+  "license": "MIT",
+  "author": "niro",
+  "type": "module",
+  "main": "./src/AtlassianDocParser.res.mjs",
+  "files": ["src/", "rescript.json"],
+  "keywords": ["rescript", "confluence", "atlassian", "markdown", "parser"],
+  "scripts": {
+    "build": "rescript",
+    "clean": "rescript clean",
+    "dev": "rescript watch",
+    "format": "rescript format",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "htmlparser2": "^9.1.0"
+  },
+  "devDependencies": {
+    "rescript": "^12.1.0",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "rescript": "^12.0.0"
+  }
+}
