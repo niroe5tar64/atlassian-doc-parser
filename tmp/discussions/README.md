@@ -86,3 +86,4 @@
 | 004 | 未対応要素の扱い（プレースホルダー + warnings） | closed | [004_unsupported-elements-policy.md](./004_unsupported-elements-policy.md) |
 | 005 | MVP 未決事項（決定反映） | closed | [005_mvp-open-items.md](./005_mvp-open-items.md) |
 | 006 | エラーハンドリング方針（Best Effort / Strict） | closed | [006_error-handling-policy.md](./006_error-handling-policy.md) |
+| 007 | ReScript ディレクトリ構成（このプロジェクトへの適用） | closed | [007_rescript-directory-structure.md](./007_rescript-directory-structure.md) |
