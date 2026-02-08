@@ -82,8 +82,13 @@ export type ConvertResult = {
   }
 }
 
-export class ConvertError extends Error {
-  code: "INVALID_XML" | "STRICT_MODE_VIOLATION" | "INTERNAL_ERROR"
+try {
+  const result = convertConfluenceStorageToMarkdown(xml, { strict: true })
+} catch (e) {
+  if (e instanceof Error && e.name === "ConvertError") {
+    const code = (e as { code?: string }).code
+    // "InvalidXml" | "StrictModeViolation" | "InternalError"
+  }
 }
 ```
 

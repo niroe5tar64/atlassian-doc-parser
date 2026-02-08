@@ -44,11 +44,11 @@
 
 ### 2. ドキュメント間の構成ズレ
 
-**決定: 007 + rescript.json を canonical（正）とする**
+**決定: `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx` を canonical（正）とする**
 
 - **ディレクトリ名**: `tests/`（複数形。`rescript.json` と一致）
-- **モジュール命名**: `ConfluenceXxx`（007 で確定済み）
-- **テスト構造**: `tests/unit/` + `tests/integration/`（007 で確定済み）
+- **モジュール命名**: `AtlassianDocParser` / `Types` / `XmlParser` / `ConfluenceInputXml` / `IrBuilder` / `MarkdownRenderer` / `Diagnostics`
+- **テスト構造**: `tests/unit/` + `tests/integration/`
 - **fixture 構造**: ケース単位のディレクトリ構成を採用
   ```
   tests/fixtures/
@@ -59,7 +59,7 @@
       input.xml
       expected.md
   ```
-- `detailed-design.md` のディレクトリ構造セクション（`test/` 表記、`Types.res`/`XmlParser.res` 命名）は 007 より前の概略であり、実装は 007 の構成に従う
+- `tmp/discussions` は決定経緯のログとして保持し、矛盾時は常に正本（`02_design.mdx`）を優先する
 - ドキュメントの同期は実装完了後にまとめて行う
 
 ### 3. Markdown エスケープ規則
@@ -139,11 +139,11 @@ type rec xmlNode = {
 **効果**:
 - `Nullable.t` が FFI 層（Htmlparser2.res + ConfluenceInputXml.res）に完全に閉じ込められる
 - IrBuilder 以降は ReScript ネイティブの `option` とパターンマッチのみで実装できる
-- 007 Q1（`ConfluenceTypes.res` の配置）も解決: 正規化済み型は `ConfluenceInputXml.res` に配置
+- 正規化済み型の責務を `ConfluenceInputXml.res` に固定できる
 
 ### 6. exception と JS Error の boundary 運用規約
 
-**決定: detailed-design.md で確定済み（追加決定不要）**
+**決定: `02_design.mdx` で確定済み（追加決定不要）**
 
 - **ConvertError を生成してよいモジュール**: 全内部モジュール（IrBuilder, XmlParser 等）
 - **catch して JS Error に変換する唯一の場所**: `AtlassianDocParser.res`（公開 API エントリポイント）
@@ -169,7 +169,7 @@ type rec xmlNode = {
 1. [x] 6 論点すべてが決定済み
 2. [ ] 設定ファイル（rescript.json, package.json）が決定内容に合わせて更新済み
 3. [ ] `bun test` でテストが検出・実行されることを smoke test で確認済み
-4. [ ] 007 のディレクトリ構成に沿った空のファイル/ディレクトリが作成済み（scaffold）
+4. [ ] `02_design.mdx` のディレクトリ構成に沿った空のファイル/ディレクトリが作成済み（scaffold）
 
 ## ステータス
 

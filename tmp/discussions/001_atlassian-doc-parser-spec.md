@@ -40,7 +40,7 @@
 
 ### 論点 0: 記述先ディレクトリ
 
-**決定**: 記述先は `tmp/atlassian-doc-parser/discussions/` とし、ファイル命名は `001_*.md` 形式とする。旧ファイル `tmp/confluence-mirror/discussions/013_atlassian-doc-parser-spec.md` は本ファイルに移動済み。
+**決定**: 記述先は `tmp/discussions/` とし、ファイル命名は `001_*.md` 形式とする。旧ファイル `tmp/confluence-mirror/discussions/013_atlassian-doc-parser-spec.md` は本ファイルに移動済み。
 
 **理由**:
 - パーサー専用トピックを Confluence Local Sync 本体の議論から分離するため

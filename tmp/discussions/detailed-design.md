@@ -11,7 +11,7 @@
 ### 本セッションで実施した内容
 
 1. `tmp/development-plan.md` の Phase 2 チェックリスト全項目を対象に詳細設計ドキュメントを作成
-2. 既存ディスカッション（`tmp/atlassian-doc-parser/discussions/001〜006`）の決定事項を前提として詳細化
+2. 既存ディスカッション（`tmp/discussions/001〜006`）の決定事項を前提として詳細化
 3. Confluence Storage Format の XML 構造を調査（[公式ドキュメント](https://confluence.atlassian.com/doc/confluence-storage-format-790796544.html)参照）
 
 ### 本セッションで決定した事項
@@ -39,7 +39,7 @@
 | ファイル | 内容 |
 |---------|------|
 | `tmp/development-plan.md` | 全体開発計画（Phase 2 チェックリスト） |
-| `tmp/atlassian-doc-parser/discussions/001〜006` | 基本設計ディスカッション（全 closed） |
+| `tmp/discussions/001〜006` | 基本設計ディスカッション（全 closed） |
 | `tmp/confluence-mirror/discussions/014_carryover-open-items.md` | 持ち越し課題一覧 |
 | `tmp/confluence-mirror/03_specifications.mdx` | 基本設計（技術仕様） |
 | `tmp/confluence-mirror/02_requirements.mdx` | 要件定義 |
@@ -313,7 +313,7 @@ type document = {children: array<blockNode>}
 | `Image({src, alt})` | `<ac:image>` | `![alt](src)` |
 | `LineBreak` | `<br />` | 末尾 2 スペース + 改行 |
 | `Unsupported(summary)` | 未対応要素全般 | `<!-- unsupported: {summary} -->` |
-| `UnsupportedInline(summary)` | 未対応インライン要素 | `<!-- unsupported: {summary} -->` |
+| `UnsupportedInline(summary)` | 未対応インライン要素 | `<!-- unsupported inline: {summary} -->` |
 
 ---
 
@@ -751,25 +751,20 @@ atlassian-doc-parser/
 │   ├── AtlassianDocParser.res     # 公開 API（エントリポイント）
 │   ├── Types.res                   # 公開型 + IR 型定義
 │   ├── XmlParser.res               # XML 文字列 → DOM ツリー
+│   ├── ConfluenceInputXml.res      # DOM 正規化（Nullable.t → option）
 │   ├── IrBuilder.res               # DOM ツリー → IR 変換
 │   ├── MarkdownRenderer.res        # IR → Markdown 文字列
 │   ├── Diagnostics.res             # warning 収集・stats 計算
 │   └── Bindings/
 │       └── Htmlparser2.res         # htmlparser2 FFI バインディング
-├── test/
-│   ├── fixtures/
-│   │   ├── 01_basic/
-│   │   │   ├── input.xml
-│   │   │   └── expected.md
-│   │   ├── 02_complex_table_code/
-│   │   │   ├── input.xml
-│   │   │   └── expected.md
-│   │   └── 03_mixed_unsupported/
-│   │       ├── input.xml
-│   │       └── expected.md
-│   ├── AtlassianDocParser_test.res  # E2E テスト（fixture ベース）
-│   ├── IrBuilder_test.res           # XML → IR の Unit テスト
-│   └── MarkdownRenderer_test.res    # IR → Markdown の Unit テスト
+├── tests/
+│   ├── fixtures/                     # Golden Test 用 fixture
+│   ├── integration/
+│   │   └── AtlassianDocParser_test.res # E2E テスト（fixture ベース）
+│   └── unit/
+│       ├── IrBuilder_test.res        # IrBuilder Unit テスト
+│       ├── MarkdownRenderer_test.res # MarkdownRenderer Unit テスト
+│       └── Diagnostics_test.res      # Diagnostics Unit テスト
 ├── rescript.json
 ├── package.json
 ├── biome.json                      # JS 出力のリント用
@@ -783,7 +778,7 @@ atlassian-doc-parser/
 - **責務**: パイプラインのオーケストレーション
 - **入力**: XML 文字列 + ConvertOptions
 - **出力**: ConvertResult
-- **処理**: XmlParser → IrBuilder → MarkdownRenderer → Diagnostics 集約
+- **処理**: XmlParser → ConfluenceInputXml → IrBuilder → MarkdownRenderer → Diagnostics 集約
 
 ```rescript
 // AtlassianDocParser.res（擬似コード）
@@ -799,20 +794,23 @@ let convertConfluenceStorageToMarkdown = (input, ~options=?) => {
     | exn => raise(ConvertError({code: InvalidXml, message: Exn.message(exn)}))
     }
 
-    // 2. IR 構築（strict 違反時は ConvertError を raise）
-    let document = IrBuilder.build(dom, diagnostics, ~strict)
+    // 2. DOM 正規化（Nullable.t → option）
+    let normalized = ConfluenceInputXml.fromDom(dom)
 
-    // 3. Markdown レンダリング
+    // 3. IR 構築（strict 違反時は ConvertError を raise）
+    let document = IrBuilder.build(normalized, diagnostics, ~strict)
+
+    // 4. Markdown レンダリング
     let markdown = MarkdownRenderer.render(document)
 
-    // 4. 結果組み立て
+    // 5. 結果組み立て
     {
       markdown,
       warnings: Diagnostics.getWarnings(diagnostics),
       stats: Diagnostics.getStats(diagnostics),
     }
   } catch {
-  // 5. Boundary: ReScript exception → JS Error に変換して re-throw
+  // 6. Boundary: ReScript exception → JS Error に変換して re-throw
   | ConvertError({code, message}) =>
     throwJsConvertError(convertErrorCodeToString(code), message)
   }
@@ -831,6 +829,16 @@ let convertConfluenceStorageToMarkdown = (input, ~options=?) => {
 - **入力**: string
 - **出力**: htmlparser2 の DOM ノード
 - **エラー**: パース不能な場合は例外（呼び出し元で ConvertError に変換）
+
+#### ConfluenceInputXml（DOM 正規化）
+
+- **責務**: htmlparser2 DOM を正規化済みノードへ変換
+- **入力**: htmlparser2 の DOM ノード
+- **出力**: `option` / variant で表現された `xmlNode`
+- **処理詳細**:
+  - `Nullable.t` を `option` へ即時変換
+  - `children: Nullable.t<array<node>>` を空配列で正規化
+  - `type_` 文字列を `nodeType` variant に変換
 
 #### IrBuilder（IR 構築）
 
@@ -872,8 +880,11 @@ AtlassianDocParser
   ├── Types
   ├── XmlParser
   │     └── Bindings/Htmlparser2  ※ domutils 不使用、ノードプロパティ直接アクセス
+  ├── ConfluenceInputXml
+  │     └── XmlParser
   ├── IrBuilder
   │     ├── Types
+  │     ├── ConfluenceInputXml
   │     └── Diagnostics
   ├── MarkdownRenderer
   │     └── Types
@@ -1226,9 +1237,9 @@ The ~~old API~~ has been replaced. See notes1 below.
 | # | 項目 | 現状 | 対応タイミング |
 |---|------|------|-------------|
 | 1 | htmlparser2 の FFI バインディング詳細 | 概略定義のみ | Phase 3a 実装時 |
-| 2 | Markdown エスケープ処理 | 未定義（`|` や `*` のエスケープ） | Phase 3a 実装時 |
+| 2 | Markdown エスケープ処理 | **解決済み**: Text ノードで文脈依存エスケープ（通常: `\\`, `*`, `_`, `[`, `]`, `` ` ``, `<`, `>` / テーブルセル内: + `|`） | `02_design.mdx` に固定 |
 | 3 | ~~`<del>` / `<s>` の取り込み有無~~ | **解決済み**: GFM `~~text~~` で MVP スコープに含める（セクション 4.8 レビューで承認） | — |
 | 4 | `<pre>` 単体の扱い | CodeBlock（language なし）として処理予定 | Phase 3a 実装時に確認 |
-| 5 | 空白・改行の正規化ルール | XML の空白処理（連続空白の圧縮等） | Phase 3a 実装時 |
+| 5 | 空白・改行の正規化ルール | **解決済み**: IrBuilder で空白正規化、`InlineCode` / `CodeBlock` はリテラル保持 | `02_design.mdx` に固定 |
 | 6 | 内部リンク解決（confluence-mirror 側） | GAS 配信時に `confluence-internal://` スキームを解決する処理。同カテゴリ内 → 相対リンク、その他 → unsupported | Phase 3b 詳細設計時 |
 | 7 | 添付画像解決（confluence-mirror 側） | `confluence-attachment://` スキームの解決処理。添付ファイル同期（持ち越し課題 C3）対応時にパス書き換え。MVP では未解決のまま出力 | Phase 3b 詳細設計時（添付ファイル同期は MVP 後） |
