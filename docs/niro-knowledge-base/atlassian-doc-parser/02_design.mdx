@@ -3,6 +3,17 @@ title: "02. 設計"
 description: "atlassian-doc-parser のアーキテクチャと主要な設計判断"
 ---
 
+## 仕様の正本（Canonical）
+
+この `02_design.mdx` を、`atlassian-doc-parser` の設計仕様における正本とします。
+
+- 適用日: 2026-02-09
+- 優先順位:
+  1. `docs/niro-knowledge-base/atlassian-doc-parser/02_design.mdx`
+  2. `tmp/discussions/*.md`（決定経緯・補足）
+
+他ドキュメントと内容が矛盾した場合は、正本である本ファイルを優先します。
+
 ## アーキテクチャ: XML → IR → Markdown
 
 本ライブラリは 2 段階変換アーキテクチャを採用しています。XML パース結果を直接 Markdown に変換するのではなく、中間表現（IR）を経由します。
@@ -140,11 +151,121 @@ type document = {children: array<blockNode>}
 | `Unsupported` | 未対応ブロック要素 | `<!-- unsupported: ... -->` |
 | `UnsupportedInline` | 未対応インライン要素 | `<!-- unsupported inline: ... -->` |
 
+### 変換マトリクス（固定）
+
+以下を MVP の固定変換契約とする。
+
+| Confluence 入力 | IR 出力 | Markdown 出力 | warning code | `strict=false` | `strict=true` | stats |
+|----------------|---------|---------------|--------------|----------------|---------------|-------|
+| `<h1>` 〜 `<h6>` | `Heading` | `#` 〜 `######` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<p>` | `Paragraph` | 段落 + 空行 | なし | 正常変換 | 正常変換 | 変化なし |
+| `<strong>` / `<b>` | `Strong` | `**text**` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<em>` / `<i>` | `Emphasis` | `*text*` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<del>` / `<s>` | `Strikethrough` | `~~text~~` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<code>` | `InlineCode` | `` `text` `` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<br />` | `LineBreak` | 段落中: 末尾 2 スペース + 改行<br/>テーブルセル内: `<br>` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<hr />` | `HorizontalRule` | `---` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ul><li>` | `BulletList` | `- item` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ol><li>` | `OrderedList` | `1. item`（マーカー幅ベースでネスト） | なし | 正常変換 | 正常変換 | 変化なし |
+| `<table>`（正常構造） | `Table` | GFM テーブル | なし | 正常変換 | 正常変換 | 変化なし |
+| `<table>`（列不揃い・不正構造） | `Table` + 補正 | 空セル補完を含む Best Effort | `INVALID_STRUCTURE` または `CONVERSION_ERROR` | warning を記録して継続 | `ConvertError(StrictModeViolation)` | `CONVERSION_ERROR` 時のみ `unsupportedNodeCount++` |
+| `<a href>` | `Link` | `[text](href)` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ac:link><ri:page ...>` | `Link` | `[text](confluence-internal://...)` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ac:image><ri:url ...>` | `Image` | `![alt](url)` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ac:image><ri:attachment ...>` | `Image` | `![alt](confluence-attachment://...)` | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ac:structured-macro ac:name="code">` | `CodeBlock` | fenced code block | なし | 正常変換 | 正常変換 | 変化なし |
+| `<ac:structured-macro ac:name!="code">` | `Unsupported` | `<!-- unsupported: ... -->` | `UNSUPPORTED_MACRO` | warning + プレースホルダー | `ConvertError(StrictModeViolation)` | `unsupportedNodeCount++`, `macroCount++` |
+| `<u>` / `<sub>` / `<sup>` | transparent（子要素展開） | 装飾なしテキスト | なし | 正常変換 | 正常変換 | 変化なし |
+| 未対応ブロック要素（例: `ac:task-list`） | `Unsupported` | `<!-- unsupported: ... -->` | `UNSUPPORTED_ELEMENT` | warning + プレースホルダー | `ConvertError(StrictModeViolation)` | `unsupportedNodeCount++` |
+| 未対応インライン要素（例: `ac:emoticon`） | `UnsupportedInline` | `<!-- unsupported inline: ... -->` | `UNSUPPORTED_INLINE` | warning + プレースホルダー | `ConvertError(StrictModeViolation)` | `unsupportedNodeCount++` |
+
+補足:
+- `INVALID_XML` と `INTERNAL_ERROR` はノード単位での warning に変換しない。`strict` 値に関係なく `ConvertError` を throw する。
+- warning フォーマットは `[CATEGORY] description` とし、CATEGORY は `UNSUPPORTED_ELEMENT` / `UNSUPPORTED_MACRO` / `UNSUPPORTED_INLINE` / `CONVERSION_ERROR` / `INVALID_STRUCTURE` を使用する。
+
 ### 構造上の特記事項
 
 - **listItem** は `array<blockNode>` を持つ（ネストリスト対応）
 - **tableCell** は `array<inlineNode>` のみ持つ（GFM テーブルの制約）
 - **Image** は inlineNode に分類し、ブロック位置では Paragraph でラップ（出力に差なし）
+
+## 空白正規化とエスケープ境界（固定）
+
+### IrBuilder の空白正規化ルール
+
+| 対象 | ルール |
+|------|--------|
+| 要素間のホワイトスペースのみテキストノード | 破棄する（XML インデント由来のため） |
+| 通常テキストノード | `\t` / `\n` / 連続スペースを単一スペースに圧縮する |
+| テキストノード先頭・末尾の空白 | 原則 trim。インライン境界（例: `Text` + `Strong`）で語間が必要な場合のみ 1 スペースを残す |
+| `InlineCode` の内容 | 正規化しない（リテラル保持） |
+| `CodeBlock` の内容（CDATA 含む） | 正規化しない（リテラル保持） |
+| テーブルセル内 | 上記と同じ正規化を適用したうえで、セル内改行は `LineBreak` として保持する |
+
+固定例:
+
+```xml
+<p>Hello   world</p>
+<p>Hello <strong>bold</strong> text</p>
+<p>
+  a
+</p>
+<ac:plain-text-body><![CDATA[  code  ]]></ac:plain-text-body>
+```
+
+```text
+Paragraph([Text("Hello world")])
+Paragraph([Text("Hello "), Strong([Text("bold")]), Text(" text")])
+Paragraph([Text("a")])
+CodeBlock.content = "  code  "
+```
+
+### MarkdownRenderer のエスケープ境界
+
+| コンテキスト | エスケープ対象 | 備考 |
+|-------------|----------------|------|
+| `Text`（通常） | `\\`, `*`, `_`, `[`, `]`, `` ` ``, `<`, `>` | バックスラッシュでエスケープ |
+| `Text`（テーブルセル内） | 上記 + `|` | セル分割誤認を防ぐ |
+| `InlineCode` | なし | リテラル出力。fence 衝突はインライン側で backtick 数を調整 |
+| `CodeBlock.content` | なし | リテラル出力。fence 長で衝突回避 |
+| Link/Image URL | なし | `href` / `src` はそのまま出力 |
+| レンダラーが意図的に出力する HTML | なし | `<br>` はそのまま出力 |
+
+## Markdown 出力規約（固定）
+
+### ネストリストのインデント
+
+- 箇条書き (`- `) の子は 2 スペース
+- 番号付き (`N. `) の子は `digits(N) + 2` スペース
+- 例: `1. ` の子は 3 スペース、`10. ` の子は 4 スペース
+
+### `<br>` の扱い
+
+- 段落・リスト項目内の `LineBreak` は `末尾 2 スペース + 改行` で出力
+- テーブルセル内の `LineBreak` は HTML の `<br>` で出力
+- `InlineCode` / `CodeBlock` 内では改行を意味変換しない（入力を維持）
+
+### ヘッダーなしテーブル
+
+- `headers: None` の場合は、`rows` の最大列数に合わせて空ヘッダー行を合成して出力する
+- 最低 1 行目は `|  | ... |`、2 行目は `| --- | ... |` を出力する
+
+```markdown
+|  |  |
+| --- | --- |
+| A | B |
+```
+
+### Code fence 衝突回避
+
+- fenced code block は backtick fence を使用する
+- 開閉 fence 長は `max(3, code content 中の連続 backtick 最大長 + 1)` とする
+- これにより、コード本文中に ````` ``` ````` が含まれても衝突しない
+
+```text
+content: "const s = \"```\";"
+fence: "````"
+```
 
 ## XML パース戦略
 
@@ -181,6 +302,43 @@ IrBuilder が再帰的に走査して IR を構築
 
 `xmlMode: true` により `ac:link`, `ri:page` 等のプレフィックス付きタグ名・属性名がそのまま保持されます。ストリーミング方式は不採用です。Confluence Storage Format は「子要素を見ないと変換方針が確定しない構造」（`ac:link`, `ac:structured-macro`, `table` など）が多く、ストリーミングでは状態機械 + 部分バッファが必要になり、実質的に DOM を自前で再構築することになるためです。
 
+### FFI 境界の型ルール（固定）
+
+`Nullable.t` は FFI 層で閉じ込め、`IrBuilder` 以降へ持ち込まない。
+
+```text
+Bindings/Htmlparser2.res
+  └ raw node（Nullable.t）
+ConfluenceInputXml.res
+  └ 正規化 node（option + variant）
+IrBuilder.res 以降
+  └ option / variant のみ
+```
+
+#### 正規化規約
+
+- `Nullable.t<'a>` は `option<'a>` に即時変換する
+- `children: Nullable.t<array<node>>` は `array<node>` へ正規化（null は `[]`）
+- `type_` 文字列は `nodeType` variant に変換する
+- 未知の `type_` は `Other(string)` として保持し、IrBuilder で `INVALID_STRUCTURE` として扱う
+
+```rescript
+type nodeType =
+  | Tag
+  | Text
+  | Cdata
+  | Comment
+  | Other(string)
+
+type rec xmlNode = {
+  nodeType: nodeType,
+  name: option<string>,
+  attribs: option<Dict.t<string>>,
+  children: array<xmlNode>,
+  data: option<string>,
+}
+```
+
 ## 主要な設計判断
 
 | 判断 | 採用方式 | 理由 | 代替案 |
@@ -192,6 +350,10 @@ IrBuilder が再帰的に走査して IR を構築
 | ネストリストインデント | マーカー幅ベース（`- ` → 2、`N. ` → digits(N)+2） | CommonMark/GFM 準拠。2 スペース固定では ordered list のネストが GitHub で正しく表示されない | 固定幅（2 or 4 スペース） |
 | `<del>` / `<s>` | GFM `~~text~~` | 意味論的マークアップ（「この部分は無効」）であり、純粋な見た目装飾とは質が異なる | テキストのみ出力（意味が失われる） |
 | `<u>` / `<sub>` / `<sup>` | テキストのみ出力（transparent、warning なし） | 標準 Markdown で表現不可。装飾は失われるが文意は保持される | `UnsupportedInline` 出力（読者へのノイズ） |
+| 空白正規化 | IrBuilder で HTML 相当の正規化（InlineCode/CodeBlock は除外） | XML インデント由来のノイズ除去と語間保持を両立 | 正規化しない（可読性低下） |
+| Markdown エスケープ境界 | Text ノードのみ文脈依存エスケープ | マークダウン解釈の誤作動を防ぎつつ過剰エスケープを回避 | 全文字列を一律エスケープ（可読性低下） |
+| code fence 衝突 | 最大 backtick 長 + 1 の fence を動的採用 | コード本文内の backtick と確実に非衝突 | 固定 ````` ``` `````（本文次第で壊れる） |
+| FFI nullability | `ConfluenceInputXml` で `Nullable.t` を `option` へ即時正規化 | FFI 依存を境界内に閉じ込め、以降の実装を単純化 | 各モジュールで都度 `Nullable` 処理 |
 
 ## モジュール構成
 
@@ -203,16 +365,20 @@ atlassian-doc-parser/
 │   ├── AtlassianDocParser.res     # 公開 API（エントリポイント）
 │   ├── Types.res                   # 公開型 + IR 型定義
 │   ├── XmlParser.res               # XML 文字列 → DOM ツリー
+│   ├── ConfluenceInputXml.res      # DOM 正規化（Nullable.t → option）
 │   ├── IrBuilder.res               # DOM ツリー → IR 変換
 │   ├── MarkdownRenderer.res        # IR → Markdown 文字列
 │   ├── Diagnostics.res             # warning 収集・stats 計算
 │   └── Bindings/
 │       └── Htmlparser2.res         # htmlparser2 FFI バインディング
-├── test/
+├── tests/
 │   ├── fixtures/                   # Golden Test 用 fixture
-│   ├── AtlassianDocParser_test.res # E2E テスト（fixture ベース）
-│   ├── IrBuilder_test.res          # IrBuilder Unit テスト
-│   └── MarkdownRenderer_test.res   # MarkdownRenderer Unit テスト
+│   ├── integration/
+│   │   └── AtlassianDocParser_test.res # E2E テスト（fixture ベース）
+│   └── unit/
+│       ├── IrBuilder_test.res      # IrBuilder Unit テスト
+│       ├── MarkdownRenderer_test.res # MarkdownRenderer Unit テスト
+│       └── Diagnostics_test.res    # Diagnostics Unit テスト
 ├── rescript.json
 ├── package.json
 └── biome.json
@@ -225,6 +391,7 @@ atlassian-doc-parser/
 | **AtlassianDocParser** | パイプラインのオーケストレーション。XmlParser → IrBuilder → MarkdownRenderer → Diagnostics 集約。ConvertError の boundary（exception → JS Error 変換） |
 | **Types** | 全モジュールで共有する型の定義（ConvertOptions, ConvertResult, IR 型） |
 | **XmlParser** | XML 文字列を htmlparser2 の DOM ツリーに変換。パース不能時は例外 |
+| **ConfluenceInputXml** | htmlparser2 DOM を正規化済みノードへ変換。`Nullable.t` を `option`/空配列へ正規化 |
 | **IrBuilder** | DOM ツリーを再帰的に走査し IR を構築。未対応要素は Unsupported ノード生成 + Diagnostics 記録。strict モードでは ConvertError を raise |
 | **MarkdownRenderer** | IR を Markdown 文字列に変換する純粋関数。副作用なし |
 | **Diagnostics** | warning メッセージの収集と stats 計算。Ref ベースの可変コンテナ（変換パイプライン内で 1 インスタンスを共有） |
@@ -236,8 +403,11 @@ AtlassianDocParser
   ├── Types
   ├── XmlParser
   │     └── Bindings/Htmlparser2
+  ├── ConfluenceInputXml
+  │     └── XmlParser
   ├── IrBuilder
   │     ├── Types
+  │     ├── ConfluenceInputXml
   │     └── Diagnostics
   ├── MarkdownRenderer
   │     └── Types
@@ -245,7 +415,7 @@ AtlassianDocParser
         └── Types
 ```
 
-依存は一方向で循環はありません。全モジュールが Types に依存し、Diagnostics は IrBuilder と AtlassianDocParser から参照されます。
+依存は一方向で循環はありません。公開型を扱う主要モジュールは `Types` に依存し、`Diagnostics` は `IrBuilder` と `AtlassianDocParser` から参照されます。
 
 ## テスト戦略
 
@@ -267,6 +437,46 @@ AtlassianDocParser
 | MarkdownRenderer | 17 件（C01〜C17） | 各 IR ノードの出力検証 + エッジケース |
 | Diagnostics | 4 件（D01〜D04） | warning / stats の収集・集計 |
 
+### テスト契約（固定）
+
+#### fixture 命名規約
+
+- `tests/fixtures/<NN>_<slug>/input.xml`
+- `tests/fixtures/<NN>_<slug>/expected.md`
+- 必要時のみ `warnings.json` と `stats.json` を同ディレクトリに追加する
+
+例:
+
+```text
+tests/fixtures/
+  01_basic/
+    input.xml
+    expected.md
+  03_mixed_unsupported/
+    input.xml
+    expected.md
+    warnings.json
+    stats.json
+```
+
+#### 自動ペアリング規約
+
+- Integration テストは `tests/fixtures/*/input.xml` を走査し、同ディレクトリの `expected.md` を必須ペアとして読む
+- どちらか片方が欠けた場合はテスト失敗とする（silent skip 禁止）
+
+#### 最低ケース数
+
+- Golden fixture: 3 ケース以上を維持
+- IrBuilder Unit: 30 ケース以上（B01〜B30）
+- MarkdownRenderer Unit: 17 ケース以上（C01〜C17）
+- Diagnostics Unit: 4 ケース以上（D01〜D04）
+- strict モード: warning category ごとに最低 1 ケース
+
+#### 回帰追加ルール
+
+- 変換不具合を修正する PR では、再現 fixture または unit case を同一 PR に必須追加する
+- 既存 fixture の期待値変更は、仕様変更かバグ修正かを PR 説明で明示する
+
 ### 初期 fixture の概要
 
 | fixture | 含む要素 | 検証観点 |
@@ -274,3 +484,20 @@ AtlassianDocParser
 | 01: basic | h1, h2, p, strong, em, a（外部）, code（inline）, br, ul | 基本要素の正常変換 |
 | 02: complex_table_code | table（th/td）, code block（言語付/なし）, inline code | 複合要素の変換 |
 | 03: mixed_unsupported | ネストリスト, ac:image（外部/添付）, ac:link, del, sup, hr, 未対応マクロ | 混合コンテンツ + unsupported + warnings |
+
+## ツールチェーン整合（固定）
+
+実装・CI の実行契約は以下で固定する。
+
+| 項目 | 固定値 |
+|------|--------|
+| テストランナー | Bun Test |
+| テストコマンド | `bun test` |
+| ReScript suffix | `.js` |
+| テストファイル命名 | `*_test.res` |
+| テスト配置 | `tests/unit/`, `tests/integration/` |
+
+補足:
+
+- `*_test.res` は `.js` にコンパイルされ、Bun Test のデフォルト検出で自動実行される
+- `vitest` は本プロジェクトの正式ツールチェーンから除外する

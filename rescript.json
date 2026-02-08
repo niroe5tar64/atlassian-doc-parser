@@ -8,7 +8,7 @@
   "package-specs": [
     { "module": "esmodule", "in-source": true }
   ],
-  "suffix": ".res.mjs",
+  "suffix": ".js",
   "dependencies": [],
   "dev-dependencies": []
 }

@@ -26,9 +26,9 @@ Thumbs.db
 *~
 
 # ReScript
-*.res.mjs
-*.res.cjs
-*.res.js
+src/**/*.js
+tests/**/*.js
+!tests/**/*.test.js
 lib/
 .bsb.lock
 
