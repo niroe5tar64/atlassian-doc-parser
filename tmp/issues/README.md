@@ -19,7 +19,8 @@ ReScript 初心者でも順番に実装を進められるように、MVP 実装�
 | Types.res 実装 | `scaffold.md` | `types-res.md` | [Open](./types-res.md) |
 | Diagnostics 最小実装 | `types-res.md` | `diagnostics-minimal.md` | [Open](./diagnostics-minimal.md) |
 | htmlparser2 FFI 追加 | `scaffold.md` | `htmlparser2-ffi.md` | [Open](./htmlparser2-ffi.md) |
-| ConfluenceInputXml 正規化 | `htmlparser2-ffi.md` | `confluence-input-xml-normalize.md` | [Open](./confluence-input-xml-normalize.md) |
+| XmlParser 薄ラッパー実装 | `htmlparser2-ffi.md` | `xml-parser.md` | [Open](./xml-parser.md) |
+| ConfluenceInputXml 正規化 | `xml-parser.md` | `confluence-input-xml-normalize.md` | [Open](./confluence-input-xml-normalize.md) |
 | IrBuilder: heading/paragraph/text | `types-res.md`, `diagnostics-minimal.md`, `confluence-input-xml-normalize.md` | `irbuilder-basic.md` | [Open](./irbuilder-basic.md) |
 | IrBuilder: 装飾系（strong/em/code/del） | `irbuilder-basic.md` | `irbuilder-inline-style.md` | [Open](./irbuilder-inline-style.md) |
 | IrBuilder: link/image | `irbuilder-basic.md` | `irbuilder-link-image.md` | [Open](./irbuilder-link-image.md) |
