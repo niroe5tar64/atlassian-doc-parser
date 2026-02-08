@@ -13,6 +13,48 @@ ReScript 初心者でも順番に実装を進められるように、MVP 実装�
 
 ## 一覧（依存順）
 
+```mermaid
+graph TD
+  scaffold[scaffold 作成]
+  types-res[Types.res 実装]
+  diagnostics[Diagnostics 最小実装]
+  htmlparser2-ffi[htmlparser2 FFI 追加]
+  xml-parser[XmlParser 薄ラッパー]
+  confluence-xml[ConfluenceInputXml 正規化]
+  irbuilder-basic[IrBuilder: heading/paragraph/text]
+  irbuilder-inline[IrBuilder: 装飾系]
+  irbuilder-link[IrBuilder: link/image]
+  irbuilder-list[IrBuilder: list]
+  irbuilder-table[IrBuilder: table]
+  md-escape[MarkdownRenderer: text escape]
+  md-structures[MarkdownRenderer: list/table/code fence]
+  integration[AtlassianDocParser 統合]
+  fixture[fixture 統合テスト]
+  strict[strict モード総点検]
+
+  scaffold --> types-res
+  scaffold --> htmlparser2-ffi
+  types-res --> diagnostics
+  types-res --> md-escape
+  types-res --> irbuilder-basic
+  htmlparser2-ffi --> xml-parser
+  xml-parser --> confluence-xml
+  diagnostics --> irbuilder-basic
+  diagnostics --> irbuilder-table
+  diagnostics --> integration
+  confluence-xml --> irbuilder-basic
+  irbuilder-basic --> irbuilder-inline
+  irbuilder-basic --> irbuilder-link
+  irbuilder-basic --> irbuilder-list
+  irbuilder-basic --> irbuilder-table
+  md-escape --> md-structures
+  irbuilder-table --> integration
+  md-structures --> integration
+  integration --> fixture
+  integration --> strict
+  fixture --> strict
+```
+
 | title | depends_on | file | jump |
 |---|---|---|---|
 | scaffold 作成 | なし | `scaffold.md` | [Open](./scaffold.md) |
