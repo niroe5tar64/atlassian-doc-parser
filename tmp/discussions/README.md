@@ -87,4 +87,5 @@
 | 005 | MVP 未決事項（決定反映） | closed | [005_mvp-open-items.md](./005_mvp-open-items.md) |
 | 006 | エラーハンドリング方針（Best Effort / Strict） | closed | [006_error-handling-policy.md](./006_error-handling-policy.md) |
 | 007 | ReScript ディレクトリ構成（このプロジェクトへの適用） | closed | [007_rescript-directory-structure.md](./007_rescript-directory-structure.md) |
-| 008 | ReScript 実装前の追加論点（未経験者が詰まりやすい箇所） | open | [008_rescript-implementation-readiness-open-items.md](./008_rescript-implementation-readiness-open-items.md) |
+| 008 | ReScript 実装前の追加論点（未経験者が詰まりやすい箇所） | closed | [008_rescript-implementation-readiness-open-items.md](./008_rescript-implementation-readiness-open-items.md) |
+| 009 | 正本ドキュメント確定と変換マトリクス固定 | closed | [009_canonical-spec-and-conversion-matrix.md](./009_canonical-spec-and-conversion-matrix.md) |
