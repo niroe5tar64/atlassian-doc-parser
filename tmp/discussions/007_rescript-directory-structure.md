@@ -99,6 +99,62 @@ tests/
 
 - Jira 実装開始時に、共通化対象（`Atlassian` / `Common`）の切り出し境界を再評価する必要がある
 
+## セカンドオピニオン（2026-02-09, Claude Opus 4.6）
+
+全体方針（責務単位ディレクトリ、`ConfluenceXxx` 命名、`src/` / `tests/` 分離、`*_test.res` 命名）はいずれも妥当。以下は実装着手前に確認しておきたい疑問点。
+
+### Q1: `ConfluenceTypes.res` の配置と責務
+
+`ConfluenceTypes.res` だけが `src/` 直下にあり、他の Confluence 実装は `confluence/` 配下にある。
+
+- このモジュールに置く型は何か？（公開 API 型？ Confluence 固有の内部型？）
+- **Confluence 固有の内部型**なら `confluence/` に移すほうが命名規約と一貫する
+- **公開 API の型**（`ConvertResult`, `ConvertOptions` 等）なら `AtlassianDocParser.resi` に含めるか、`AtlassianTypes.res` のように名前を変えるほうが意図が伝わる
+
+→ 実装着手時に、このモジュールの責務を明確にしてから配置を確定する。
+
+### Q2: `ConfluenceMarkdownRenderer` と `ConfluenceMarkdownWriter` の分離は MVP で必要か
+
+2モジュールに分ける想定の責務境界:
+- **Renderer**: IR ノードツリーを走査して Markdown 構造を決定する
+- **Writer**: インデント管理・改行制御など、文字列組み立てのユーティリティ
+
+ただし MVP 段階では Markdown 出力の複雑度が低い可能性がある。最初は 1モジュール（`ConfluenceMarkdownRenderer`）で始め、文字列組み立てロジックが肥大化した時点で Writer を分離する方針も検討に値する。
+
+→ 実装時の判断に委ねる。初期は統合して始めても良い。
+
+### Q3: `namespace: true` によるモジュール参照の冗長性
+
+`rescript.json` に `"namespace": true` が設定されているため、すべてのモジュールは外部から `AtlassianDocParser.ConfluenceInputXml` のように参照される。
+
+- パッケージ内部では `ConfluenceInputXml` で直接参照できるので、内部コードでは問題にならない
+- ただし、ReScript のエラーメッセージやコンパイル出力には namespace 付きのフルパスが表示される場合がある
+- 実装開始後、モジュール名が長すぎて可読性に影響しないか確認する
+
+→ 実装中に不都合が出たら `module C = ConfluenceInputXml` 等のエイリアスで対処可能。深刻な問題にはならないはず。
+
+### Q4: fixture ファイルのペアリング規約
+
+```
+fixtures/xml/basic.xml  <->  fixtures/md/basic.md
+```
+
+Golden test でファイル名の一致が暗黙の規約になっている。
+
+- fixture 追加時にペアの片方だけ追加してテストが壊れる（または無視される）リスクがある
+- テストランナー側で `xml/` を走査し、同名の `md/` ファイルを自動ペアリングする仕組みを早期に入れると、fixture 追加のたびにテストコードを書き足す手間が省ける
+
+→ テスト実装時に、自動ペアリングの仕組みを検討する。
+
+### Q5: `AtlassianStrictMode_test.res` を独立モジュールにする必要性
+
+strict モードのテストが `AtlassianDocParser_test.res` と別モジュールになっている。
+
+- strict モードは公開 API の `options` 経由で切り替える機能（`006`）なので、`AtlassianDocParser_test.res` 内の describe ブロックとして収容できる可能性がある
+- ただし、strict モードのテストケースが多くなる見込みがあれば分離は妥当
+
+→ テスト実装時に、ボリュームを見て判断する。
+
 ## ステータス
 
 決定済み
