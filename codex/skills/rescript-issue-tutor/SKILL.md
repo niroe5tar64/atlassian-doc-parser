@@ -13,8 +13,8 @@ Guide the user to learn ReScript by implementing `tmp/issues/*.md` one by one, k
 
 If the user wants a durable daily study record, initialize a log file in the repo:
 - Run `scripts/learning_log.sh init --issue <tmp/issues file> --timebox <minutes> --mode hints`
-- Append notes/Q&A/stuck points as they happen with `scripts/learning_log.sh add ...`
-- Close the day with `scripts/learning_log.sh close` (adds a summary section, with Q&A auto-extracted)
+- **Automation mode**: once logging is enabled, the agent should execute `scripts/learning_log.sh add ...` automatically at the end of relevant replies (no user copy/paste).
+- Close the day with `scripts/learning_log.sh close` (adds a summary section, with Q&A auto-extracted; safe to call multiple times)
 
 ### 0) Pick the issue
 
@@ -64,7 +64,7 @@ When replying during an issue, keep it structured and short:
 - ReScript focus: …
 - Next step (1): …
 - Check (how to verify): …
-- Log (if enabled): one `scripts/learning_log.sh add ...` entry to capture what was learned / decided
+- Log (if enabled): auto-run one `scripts/learning_log.sh add ...` entry to capture what was learned / decided
 - If stuck: paste `file:line` + error
 
 ## Scripts

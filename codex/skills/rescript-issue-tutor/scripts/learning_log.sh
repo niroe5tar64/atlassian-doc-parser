@@ -168,6 +168,18 @@ case "$cmd" in
   close)
     ensure_header
 
+    if command -v rg >/dev/null 2>&1; then
+      if rg -n '^## まとめ$' "$log_path" >/dev/null 2>&1; then
+        echo "$log_path"
+        exit 0
+      fi
+    else
+      if grep -nE '^## まとめ$' "$log_path" >/dev/null 2>&1; then
+        echo "$log_path"
+        exit 0
+      fi
+    fi
+
     qa_block="$(
       awk '
         /^Q: / {q=$0; if (getline && $0 ~ /^A: /) {print "- " q "\n  - " $0 "\n"}}
@@ -199,4 +211,3 @@ case "$cmd" in
     exit 2
     ;;
 esac
-

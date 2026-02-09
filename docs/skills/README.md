@@ -30,6 +30,7 @@ cp -a "$(pwd)/codex/skills/rescript-issue-tutor" ~/.codex/skills/
 - `rescript-issue-tutor`: `tmp/issues` を教材にして ReScript を伴走学習する  
   - docs: `docs/skills/rescript-issue-tutor.md`
   - skill: `codex/skills/rescript-issue-tutor/`
+  - 学習ログ: 有効化後は Agent が `learning_log.sh add` を自動実行する運用を推奨
 
 ## 追加・更新のルール
 
@@ -37,4 +38,3 @@ cp -a "$(pwd)/codex/skills/rescript-issue-tutor" ~/.codex/skills/
 - 必須: `SKILL.md`（YAML frontmatter の `name`/`description` を含む）
 - 可能なら `agents/openai.yaml` も同梱（UI用メタデータ）
 - スクリプトは `scripts/`、参照資料は `references/` に分ける
-

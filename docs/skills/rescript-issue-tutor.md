@@ -47,6 +47,9 @@ codex/skills/rescript-issue-tutor/scripts/list_tmp_issues.sh --next
 
 出力先: `tmp/memo/learning-logs/YYYY-MM-DD.md`
 
+通常は **ログを有効化したら、以後の記録（add）はAgentが自動実行** する運用を想定しています。
+（手動で追記したい場合のみ、下のコマンドを直接叩いてください）
+
 ```bash
 # セッション開始
 codex/skills/rescript-issue-tutor/scripts/learning_log.sh init \
