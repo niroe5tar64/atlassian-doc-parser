@@ -1,0 +1,4 @@
+interface:
+  display_name: "ReScript Issue Tutor"
+  short_description: "tmp/issues でReScriptを伴走学習"
+  default_prompt: "Use $rescript-issue-tutor to guide me through implementing the next tmp/issues task while teaching ReScript basics."
