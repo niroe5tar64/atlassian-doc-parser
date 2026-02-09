@@ -167,8 +167,8 @@ type rec xmlNode = {
 以下がすべて満たされた状態で、迷わず実装に入れる:
 
 1. [x] 6 論点すべてが決定済み
-2. [ ] 設定ファイル（rescript.json, package.json）が決定内容に合わせて更新済み
-3. [ ] `bun test` でテストが検出・実行されることを smoke test で確認済み
+2. [x] 設定ファイル（rescript.json, package.json）が決定内容に合わせて更新済み
+3. [x] `bun test` でテストが検出・実行されることを smoke test で確認済み
 4. [ ] `02_design.mdx` のディレクトリ構成に沿った空のファイル/ディレクトリが作成済み（scaffold）
 
 ## ステータス
